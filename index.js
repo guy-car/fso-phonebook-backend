@@ -4,10 +4,6 @@ const app = express()
 
 app.use(express.json())
 
-const cors = require('cors')
-
-app.use(cors())
-
 app.use(express.static('dist'))
 
 // Create a custom token for logging request body
