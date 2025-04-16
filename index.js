@@ -1,5 +1,17 @@
 const express = require('express')
+const morgan = require('morgan')
 const app = express()
+
+app.use(express.json())
+
+const cors = require('cors')
+
+app.use(cors())
+
+// Create a custom token for logging request body
+morgan.token('body', (req) => JSON.stringify(req.body))
+// Use morgan with a custom format that includes the body for POST requests
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
 
 // Define your phonebook data here
 let persons = [
@@ -24,8 +36,6 @@ let persons = [
       "number": "39-23-6423122"
     }
 ]
-
-app.use(express.json())
 
 //// Define your routes
 // display hello world at root url
