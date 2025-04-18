@@ -1,133 +1,129 @@
+require('dotenv').config()
 const express = require('express')
+const Person = require('./models/person')
 const morgan = require('morgan')
+
 const app = express()
-
-app.use(express.json())
-
-app.use(express.static('dist'))
 
 // Create a custom token for logging request body
 morgan.token('body', (req) => JSON.stringify(req.body))
 // Use morgan with a custom format that includes the body for POST requests
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
 
-// Define your phonebook data here
-let persons = [
-    { 
-      "id": "1",
-      "name": "Arto Hellas", 
-      "number": "040-123456"
-    },
-    { 
-      "id": "2",
-      "name": "Ada Lovelace", 
-      "number": "39-44-5323523"
-    },
-    { 
-      "id": "3",
-      "name": "Dan Abramov", 
-      "number": "12-43-234345"
-    },
-    { 
-      "id": "4",
-      "name": "Mary Poppendieck", 
-      "number": "39-23-6423122"
-    }
-]
+const errorHandler = (error, request, response, next) => {
+    console.log(error.message)
 
-//// Define your routes
-// display hello world at root url
+    if (error.name === 'CastError') {
+        return response.status(400).send({ error: 'malformatted id'})
+    }
+    next(error)
+}
+
+app.use(express.static('dist'))
+app.use(express.json())
+
 app.get('/', (request, response) => {
     response.send('<h1>Hello World!</h1>')
     console.log("successful GET for http://localhost:3001")
   })
 
-// get data and display on /persons
+//////////////////////////////////////////
+///////        ROUTES              ///////   
+//////////////////////////////////////////
+
+
+/////////////////////
+///////GET all phonebook entries
+/////////////////////
 app.get('/api/persons', (request, response) => {
-    response.json(persons)
-    console.log("successful GET for http://localhost:3001/api/persons")
+    Person.find({}).then(persons => {
+        response.json(persons)
+        console.log("successfully fetched all phonebook entries")
+    })
 })
 
-// info page with number of person in phonebook and time when request received
+/////////////////////
+///////Load info page with number of phonebook entries + time of request
+/////////////////////
 app.get('/info',(request, response) => {
+    const count = Person.countDocuments({})
     const timeOfRequest = new Date()
     const infoEl = 
-        `<p>Phonebook has info for ${persons.length} people</p>
+        `<p>Phonebook has info for ${count} people</p>
         ${timeOfRequest}`
     response.send(infoEl)
-    console.log("successful GET for http://localhost:3001/info")
+    console.log("successfully counted number of documents")
 })
 
-// display info a single person
-app.get('/api/persons/:id', (request, response) => {
-    const id = request.params.id
-    const person = persons.find(person => person.id === id)
-
-    if (person) {
-        response.json(person)
-    } else {
-        response.status(404).end()
-    }
-})
-
-// delete a user Standard RESTful
-app.delete('/api/persons/:id', (request, response) => {
-    const id = request.params.id
-    persons = persons.filter(person => person.id !== id)
-    response.status(200).end()
-})
-
-// delete a user (with added developper info)
-app.delete("/api/persons/:id", (request, response) => {
-    const id = request.params.id
-    const personToDelete = persons.find(person => person.id === id)
-
-    if (personToDelete) {
-        const deletedInfo = {
-            message: "Person deleted successfully",
-            deleted: personToDelete
+/////////////////////
+///////GET info for a single person
+/////////////////////
+app.get('/api/persons/:id', (request, response, next) => {
+    Person.findById(request.params.id).then(person => {
+        if (person) {
+            response.json(person)
+        } else {
+            response.status(404).end()
         }
-        // remove person from persons array
-        persons = persons.filter(person => person.id !== id)
-        console.log("Deleted: ", personToDelete.name)
-        response.status(200).json(deletedInfo)
-    } else {
-        response.status(404).json({error: "Person not found"})
-    }
+    })
+    .catch(error => next(error))
 })
 
-// Add a new user
-const generateId = () => (
-    Math.floor(Math.random()*100000)
-)
-console.log(generateId())
-
+/////////////////////
+///////POST new person
+/////////////////////
 app.post('/api/persons', (request, response) => {
     const body = request.body
-    const nameAlreadyExists = persons.some(person => person.name === body.name)
-    console.log(nameAlreadyExists)
-    console.log(body.name)
 
-    if (!body.name) {
+    if(!body.name) {
         return response.status(400).json({
-            error: 'name missing'
-        })
-    } else if (!body.number) {
-        return response.status(400).json({
-            error: 'number missing'
-        })
-    } else if (nameAlreadyExists) {
-        return response.status(400).json({
-            error: 'name must be unique'
+            error: 'name missing',
         })
     }
-    const person = {
+    const person = new Person({
         name: body.name,
-        number: body.number,
-        id: generateId()
-    }
-    persons = persons.concat(person)
-    response.json(person)
+        number: body.number 
+    })
+    person.save().then(savedPerson => {
+        response.json(savedPerson)
+    })
+})
+
+/////////////////////
+///////DELETE new person
+/////////////////////
+
+app.delete('/api/persons/:id', (request, response, next) => {
+    Person.findByIdAndDelete(request.params.id)
+    .then(result => {
+        response.status(204).end()
+    })
+    .catch(error => next(error))
+
+})
+
+/////////////////////
+///////PUT change existing number
+/////////////////////
+
+app.put('/api/persons/:id', (request, response, next) => {
+    console.log("heya")
+    const {name, number} = request.body
+    Person.findById(request.params.id)
+    .then(person => {
+        if (!person) {
+            console.log("no such person")
+            return response.status(404).end()
+        }
+        console.log("let's update this number")
+        person.name = name
+        person.number = number
+
+        return person.save().then((updatedPerson) => {
+            response.json(updatedPerson)
+        })
+    })
+    .catch(error => next(error))
 })
 
 // Server is listening to port 3001
