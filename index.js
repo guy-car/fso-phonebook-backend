@@ -135,6 +135,8 @@ app.put('/api/persons/:id', (request, response, next) => {
     .catch(error => next(error))
 })
 
+app.use(errorHandler)
+
 // Server is listening to port 3001
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
